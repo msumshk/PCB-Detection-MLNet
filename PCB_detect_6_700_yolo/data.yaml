@@ -1,0 +1,6 @@
+train: ./train/images
+val: ./valid/images
+test: ./test/images
+
+nc: 6
+names: ['Dry_joint', 'Incorrect_installation', 'Short_circuit', 'low_solder', 'oppostie_direction', 'redundant']

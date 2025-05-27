@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 项目基本配置 -->
+  <PropertyGroup>
+    <!-- 输出类型：控制台应用程序 -->
+    <OutputType>Exe</OutputType>
+    <!-- 目标框架：.NET 8.0 -->
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- 启用隐式using语句，自动引入常用命名空间 -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 启用可空引用类型，提高代码安全性 -->
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- NuGet包依赖 -->
+  <ItemGroup>
+    <!-- ML.NET核心包：提供机器学习基础功能 -->
+    <PackageReference Include="Microsoft.ML" Version="3.0.1" />
+    <!-- ML.NET视觉包：提供图像分类和深度学习功能 -->
+    <PackageReference Include="Microsoft.ML.Vision" Version="3.0.1" />
+    <!-- ML.NET图像分析包：提供图像预处理功能 -->
+    <PackageReference Include="Microsoft.ML.ImageAnalytics" Version="3.0.1" />
+    <!-- ML.NET TensorFlow包：提供TensorFlow集成支持 -->
+    <PackageReference Include="Microsoft.ML.TensorFlow" Version="3.0.1" />
+    <!-- TensorFlow运行时：提供TensorFlow底层运行环境 -->
+    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.3.1" />
+    <!-- YAML解析器：用于读取数据集配置文件 -->
+    <PackageReference Include="YamlDotNet" Version="15.1.2" />
+  </ItemGroup>
+
+</Project>
