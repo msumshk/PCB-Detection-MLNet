@@ -46,8 +46,9 @@ dotnet restore --no-cache
 本版本针对 Apple Silicon (M1/M2/M3) Mac 进行了特别优化：
 
 1. **TensorFlow 版本升级**：使用支持 Apple Silicon 的 TensorFlow 2.16.0
-2. **架构选择**：自动检测系统架构并选择合适的模型架构
-3. **备用训练方案**：当 TensorFlow 不可用时，自动切换到传统机器学习方法
+2. **架构选择**：自动检测系统架构并选择合适的深度学习模型架构
+3. **强制深度学习**：仅支持TensorFlow深度学习，不提供传统机器学习备用方案
+4. **MacOS优化**：针对Apple Silicon和Intel Mac的特定优化设置
 
 ### 项目文件更改
 
@@ -99,7 +100,7 @@ dotnet run --runtime osx-x64
    arch -x86_64 dotnet run
    ```
 
-4. **备用方案**：项目会自动检测 TensorFlow 可用性，如果不可用会切换到传统机器学习方法
+4. **强制要求**：项目仅支持TensorFlow深度学习，如果TensorFlow不可用将终止运行
 
 ### 内存不足
 
@@ -161,10 +162,11 @@ PCB_detect_6_700_yolo/
 - 根据系统能力选择合适的训练方法
 - 智能错误处理和恢复
 
-### 双重训练策略
+### 纯TensorFlow深度学习
 
-1. **深度学习方法**（首选）：使用 ImageClassification 训练器
-2. **传统机器学习方法**（备用）：使用 SDCA 分类器
+- **仅支持深度学习**：专门使用 TensorFlow ImageClassification 训练器
+- **无传统机器学习备用方案**：确保使用最先进的深度学习技术
+- **强制TensorFlow依赖**：必须正确配置TensorFlow环境才能运行
 
 ### 中文本地化
 
