@@ -45,16 +45,18 @@ dotnet restore --no-cache
 
 本版本针对 Apple Silicon (M1/M2/M3) Mac 进行了特别优化：
 
-1. **TensorFlow 版本升级**：使用支持 Apple Silicon 的 TensorFlow 2.16.0
-2. **架构选择**：自动检测系统架构并选择合适的深度学习模型架构
+1. **TensorFlow 稳定版本**：使用经过验证的 TensorFlow 2.3.1 稳定版本
+2. **多重初始化策略**：提供标准、兼容和简化三种TensorFlow初始化方法
 3. **强制深度学习**：仅支持TensorFlow深度学习，不提供传统机器学习备用方案
 4. **MacOS优化**：针对Apple Silicon和Intel Mac的特定优化设置
+5. **环境变量优化**：自动设置TensorFlow兼容性环境变量
 
 ### 项目文件更改
 
-- 升级`SciSharp.TensorFlow.Redist`到 2.16.0 版本
-- 添加 Apple Silicon 特定的 TensorFlow 运行时包
+- 使用`SciSharp.TensorFlow.Redist` 2.3.1 稳定版本
+- 添加多重TensorFlow初始化策略
 - 增强错误处理和系统兼容性检测
+- 自动环境变量配置
 
 ## 运行项目
 
@@ -78,29 +80,45 @@ dotnet run --runtime osx-x64
 
 ### TensorFlow 初始化失败
 
-如果遇到 TensorFlow 绑定错误：
+项目现在包含多重TensorFlow初始化策略，会自动尝试：
 
-1. **检查系统架构**：
+1. **标准初始化**：使用系统推荐的架构
+2. **兼容模式初始化**：使用轻量级MobilenetV2架构
+3. **简化架构初始化**：使用最基础的ResnetV250架构
+
+如果所有初始化方法都失败：
+
+1. **Apple Silicon Mac 解决方案**：
 
    ```bash
-   uname -m  # 应该显示 arm64 (Apple Silicon) 或 x86_64 (Intel)
-   ```
-
-2. **清理并重新构建**：
-
-   ```bash
+   # 使用Rosetta 2运行
+   arch -x86_64 dotnet run
+   
+   # 安装x64版本的.NET SDK
+   curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --architecture x64
+   
+   # 清理并重新构建
    dotnet clean
    dotnet restore --force
-   dotnet build
+   arch -x86_64 dotnet build
+   
+   # 设置环境变量
+   export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+   export TF_CPP_MIN_LOG_LEVEL=2
    ```
 
-3. **使用 Rosetta 2（仅限 Apple Silicon）**：
+2. **Intel Mac 解决方案**：
 
    ```bash
-   arch -x86_64 dotnet run
+   # 确保使用x64架构
+   dotnet run --runtime osx-x64
+   
+   # 重新安装依赖
+   dotnet clean
+   dotnet restore --force
    ```
 
-4. **强制要求**：项目仅支持TensorFlow深度学习，如果TensorFlow不可用将终止运行
+3. **强制要求**：项目仅支持 TensorFlow 深度学习，如果 TensorFlow 不可用将终止运行
 
 ### 内存不足
 
@@ -201,3 +219,4 @@ PCB_detect_6_700_yolo/
 - 添加备用训练方案
 - 中文本地化
 - 增强错误处理
+
