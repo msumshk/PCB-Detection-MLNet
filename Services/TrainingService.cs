@@ -2,13 +2,15 @@ using Microsoft.ML;
 using Microsoft.ML.Data;
 using Microsoft.ML.Vision;
 using PCBDetection.Models;
+using System.Runtime.InteropServices;
 
 namespace PCBDetection.Services
 {
     /// <summary>
-    /// 训练服务类
+    /// 训练服务类 - MacOS优化版本
     /// 负责PCB缺陷检测模型的深度学习训练、评估和预测
     /// 使用ML.NET的ImageClassification训练器进行图像分类任务
+    /// 针对MacOS和Apple Silicon进行了特别优化
     /// </summary>
     public class TrainingService
     {
@@ -16,20 +18,25 @@ namespace PCBDetection.Services
         /// ML.NET上下文实例，用于机器学习操作
         /// </summary>
         private readonly MLContext _mlContext;
-        
+
         /// <summary>
         /// 数据服务实例，用于加载训练数据
         /// </summary>
         private readonly DataService _dataService;
-        
+
         /// <summary>
         /// 模型输出目录路径
         /// </summary>
         private readonly string _outputDir = "Output";
 
         /// <summary>
+        /// 是否为Apple Silicon Mac
+        /// </summary>
+        private readonly bool _isAppleSilicon;
+
+        /// <summary>
         /// 构造函数
-        /// 初始化训练服务，创建输出目录
+        /// 初始化训练服务，创建输出目录，检测系统架构
         /// </summary>
         /// <param name="mlContext">ML.NET上下文</param>
         /// <param name="dataService">数据服务实例</param>
@@ -37,12 +44,19 @@ namespace PCBDetection.Services
         {
             _mlContext = mlContext;
             _dataService = dataService;
-            
+            _isAppleSilicon = RuntimeInformation.OSArchitecture == Architecture.Arm64 &&
+                             RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
             // 确保输出目录存在，如果不存在则创建
             if (!Directory.Exists(_outputDir))
             {
                 Directory.CreateDirectory(_outputDir);
             }
+
+            // 显示系统信息
+            Console.WriteLine($"系统架构: {RuntimeInformation.OSArchitecture}");
+            Console.WriteLine($"操作系统: {RuntimeInformation.OSDescription}");
+            Console.WriteLine($"Apple Silicon Mac: {_isAppleSilicon}");
         }
 
         /// <summary>
@@ -54,28 +68,30 @@ namespace PCBDetection.Services
         {
             try
             {
-                Console.WriteLine("Initializing TensorFlow environment...");
-                InitializeTensorFlow(); // 初始化TensorFlow环境
+                Console.WriteLine("正在初始化TensorFlow环境...");
+                var tensorFlowAvailable = InitializeTensorFlow(); // 初始化TensorFlow环境
 
-                Console.WriteLine("Loading training data...");
+                Console.WriteLine("正在加载训练数据...");
                 // 加载训练数据和验证数据
                 var trainData = _dataService.LoadTrainingData();
                 var validationData = _dataService.LoadValidationData();
 
                 // 显示数据集统计信息
-                Console.WriteLine($"Training samples: {trainData.GetRowCount()}");
-                Console.WriteLine($"Validation samples: {validationData.GetRowCount()}");
+                Console.WriteLine($"训练样本数: {trainData.GetRowCount()}");
+                Console.WriteLine($"验证样本数: {validationData.GetRowCount()}");
 
-                Console.WriteLine("Building deep learning pipeline...");
-                // 构建深度学习训练管道
-                var pipeline = BuildDeepLearningPipeline(validationData);
+                Console.WriteLine("正在构建深度学习管道...");
+                // 根据TensorFlow可用性选择训练方法
+                var pipeline = tensorFlowAvailable ?
+                    BuildDeepLearningPipeline(validationData) :
+                    BuildFallbackPipeline(validationData);
 
-                Console.WriteLine("Starting deep learning model training...");
-                Console.WriteLine("This may take a while depending on your hardware...");
+                Console.WriteLine("开始模型训练...");
+                Console.WriteLine("这可能需要一些时间，具体取决于您的硬件配置...");
                 // 执行模型训练
                 var model = pipeline.Fit(trainData);
 
-                Console.WriteLine("Evaluating model...");
+                Console.WriteLine("正在评估模型...");
                 // 在验证集上评估模型性能
                 EvaluateModel(model, validationData);
 
@@ -84,8 +100,19 @@ namespace PCBDetection.Services
             catch (Exception ex)
             {
                 // 捕获训练过程中的异常
-                Console.WriteLine($"Training failed: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Console.WriteLine($"训练失败: {ex.Message}");
+                Console.WriteLine($"堆栈跟踪: {ex.StackTrace}");
+
+                // 如果是TensorFlow相关错误，提供解决建议
+                if (ex.Message.Contains("TensorFlow") || ex.Message.Contains("Tensorflow"))
+                {
+                    Console.WriteLine("\n=== MacOS TensorFlow 问题解决建议 ===");
+                    Console.WriteLine("1. 确保已安装最新版本的 .NET 8.0");
+                    Console.WriteLine("2. 尝试运行: dotnet restore --force");
+                    Console.WriteLine("3. 如果问题持续，可以尝试使用传统机器学习方法");
+                    Console.WriteLine("4. 对于Apple Silicon Mac，可能需要使用Rosetta 2运行");
+                }
+
                 throw;
             }
         }
@@ -94,30 +121,44 @@ namespace PCBDetection.Services
         /// 初始化TensorFlow环境
         /// 通过创建测试管道来验证TensorFlow是否正确安装和配置
         /// </summary>
-        private void InitializeTensorFlow()
+        /// <returns>TensorFlow是否可用</returns>
+        private bool InitializeTensorFlow()
         {
             try
             {
                 // 尝试初始化TensorFlow环境
-                Console.WriteLine("Checking TensorFlow availability...");
-                
+                Console.WriteLine("正在检查TensorFlow可用性...");
+
                 // 创建一个简单的测试数据来验证TensorFlow是否可用
-                var testData = new List<ImageData> 
-                { 
-                    new ImageData { ImagePath = "", Label = "test" } 
+                var testData = new List<ImageData>
+                {
+                    new ImageData { ImagePath = "", Label = "test" }
                 };
                 var testDataView = _mlContext.Data.LoadFromEnumerable(testData);
-                
+
                 // 创建测试管道，这将触发TensorFlow初始化
                 var testPipeline = _mlContext.Transforms.Conversion.MapValueToKey("LabelAsKey", "Label");
                 var testModel = testPipeline.Fit(testDataView);
-                
-                Console.WriteLine("TensorFlow environment initialized successfully.");
+
+                // 尝试创建ImageClassification训练器来测试TensorFlow
+                var options = new ImageClassificationTrainer.Options()
+                {
+                    FeatureColumnName = "Image",
+                    LabelColumnName = "LabelAsKey",
+                    Arch = ImageClassificationTrainer.Architecture.ResnetV250,
+                    TestOnTrainSet = false
+                };
+
+                var imageClassificationTrainer = _mlContext.MulticlassClassification.Trainers.ImageClassification(options);
+
+                Console.WriteLine("TensorFlow环境初始化成功！");
+                return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"TensorFlow initialization warning: {ex.Message}");
-                // 继续执行，让实际的训练过程处理TensorFlow错误
+                Console.WriteLine($"TensorFlow初始化失败: {ex.Message}");
+                Console.WriteLine("将使用备用训练方法...");
+                return false;
             }
         }
 
@@ -131,13 +172,18 @@ namespace PCBDetection.Services
         {
             // 创建标签转换管道：将字符串标签转换为数值键
             var labelKeyPipeline = _mlContext.Transforms.Conversion.MapValueToKey("LabelAsKey", "Label");
-            
+
             // 创建图像加载管道：从文件路径加载原始图像字节
             var imagePipeline = _mlContext.Transforms.LoadRawImageBytes("Image", null, "ImagePath");
-            
+
             // 预处理验证数据，确保它有正确的列结构
             var preprocessedValidation = labelKeyPipeline.Fit(validationData).Transform(validationData);
             preprocessedValidation = imagePipeline.Fit(preprocessedValidation).Transform(preprocessedValidation);
+
+            // 为Apple Silicon选择更轻量的架构
+            var architecture = _isAppleSilicon ?
+                ImageClassificationTrainer.Architecture.ResnetV250 :
+                ImageClassificationTrainer.Architecture.ResnetV2101;
 
             // 配置ML.NET 3.0的ImageClassification训练器选项
             var options = new ImageClassificationTrainer.Options()
@@ -145,15 +191,48 @@ namespace PCBDetection.Services
                 FeatureColumnName = "Image",        // 图像特征列名
                 LabelColumnName = "LabelAsKey",     // 标签列名
                 ValidationSet = preprocessedValidation, // 验证数据集
-                Arch = ImageClassificationTrainer.Architecture.ResnetV2101, // 使用ResNet V2 101架构
-                TestOnTrainSet = false              // 不在训练集上测试
+                Arch = architecture,                // 根据系统选择架构
+                TestOnTrainSet = false,             // 不在训练集上测试
+                WorkspacePath = _outputDir          // 设置工作空间路径
             };
+
+            Console.WriteLine($"使用架构: {architecture}");
 
             // 构建完整的训练管道
             var pipeline = labelKeyPipeline
                 .Append(imagePipeline) // 添加图像加载步骤
                 .Append(_mlContext.MulticlassClassification.Trainers.ImageClassification(options)) // 添加深度学习训练器
                 .Append(_mlContext.Transforms.Conversion.MapKeyToValue("PredictedLabel", "PredictedLabel")); // 将预测结果转换回字符串
+
+            return pipeline;
+        }
+
+        /// <summary>
+        /// 构建备用训练管道（当TensorFlow不可用时）
+        /// 使用传统机器学习方法进行图像分类
+        /// </summary>
+        /// <param name="validationData">验证数据集</param>
+        /// <returns>备用训练管道</returns>
+        private IEstimator<ITransformer> BuildFallbackPipeline(IDataView validationData)
+        {
+            Console.WriteLine("使用备用训练方法（传统机器学习）...");
+
+            // 创建标签转换管道
+            var labelKeyPipeline = _mlContext.Transforms.Conversion.MapValueToKey("LabelAsKey", "Label");
+
+            // 创建图像加载和特征提取管道
+            var imagePipeline = _mlContext.Transforms.LoadImages("Image", null, "ImagePath")
+                .Append(_mlContext.Transforms.ResizeImages("Image", 224, 224))
+                .Append(_mlContext.Transforms.ExtractPixels("Features", "Image"));
+
+            // 使用多分类训练器（如LightGBM或SDCA）
+            var trainer = _mlContext.MulticlassClassification.Trainers.SdcaMaximumEntropy("LabelAsKey", "Features");
+
+            // 构建完整的训练管道
+            var pipeline = labelKeyPipeline
+                .Append(imagePipeline)
+                .Append(trainer)
+                .Append(_mlContext.Transforms.Conversion.MapKeyToValue("PredictedLabel", "PredictedLabel"));
 
             return pipeline;
         }
@@ -187,7 +266,7 @@ namespace PCBDetection.Services
                 Console.WriteLine($"\n=== Confusion Matrix ===");
                 var confusionMatrix = metrics.ConfusionMatrix;
                 Console.WriteLine($"Confusion Matrix: {confusionMatrix.NumberOfClasses}x{confusionMatrix.NumberOfClasses}");
-                
+
                 // 打印混淆矩阵的具体数值
                 var matrix = confusionMatrix.Counts;
                 for (int i = 0; i < confusionMatrix.NumberOfClasses; i++)
@@ -228,10 +307,10 @@ namespace PCBDetection.Services
                 // 构建完整的模型保存路径
                 var modelPath = Path.Combine(_outputDir, modelName);
                 Console.WriteLine($"Saving model to: {modelPath}");
-                
+
                 // 获取训练数据的架构信息
                 var trainData = _dataService.LoadTrainingData();
-                
+
                 // 保存模型和数据架构
                 _mlContext.Model.Save(model, trainData.Schema, modelPath);
                 Console.WriteLine("Model saved successfully!");
@@ -252,7 +331,7 @@ namespace PCBDetection.Services
             Console.WriteLine("Testing model with test dataset...");
             // 加载测试数据
             var testData = _dataService.LoadTestData();
-            
+
             // 检查是否有测试数据
             if (testData.GetRowCount() == 0)
             {
@@ -277,18 +356,18 @@ namespace PCBDetection.Services
             {
                 // 创建预测引擎
                 var predictionEngine = _mlContext.Model.CreatePredictionEngine<ImageData, ImagePrediction>(model);
-                
+
                 // 创建输入数据
                 var imageData = new ImageData { ImagePath = imagePath };
-                
+
                 // 执行预测
                 var prediction = predictionEngine.Predict(imageData);
-                
+
                 // 返回格式化的预测结果（中英文）
                 if (prediction != null && !string.IsNullOrEmpty(prediction.PredictedLabel))
                 {
                     var formattedResult = ImageData.GetDefectDescription(prediction.PredictedLabel);
-                    
+
                     // 如果有置信度分数，也显示出来
                     if (prediction.Score != null && prediction.Score.Length > 0)
                     {
@@ -296,10 +375,10 @@ namespace PCBDetection.Services
                         var confidence = (maxScore * 100).ToString("F2");
                         return $"{formattedResult} (置信度: {confidence}%)";
                     }
-                    
+
                     return formattedResult;
                 }
-                
+
                 return "Unknown - 未知";
             }
             catch (Exception ex)
@@ -309,4 +388,4 @@ namespace PCBDetection.Services
             }
         }
     }
-} 
+}
