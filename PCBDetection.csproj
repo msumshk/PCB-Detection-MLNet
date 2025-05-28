@@ -28,10 +28,10 @@
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
 
-  <!-- MacOS Apple Silicon特定配置 -->
-  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'osx-arm64' OR ('$(RuntimeIdentifier)' == '' AND '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64')">
-    <!-- 为Apple Silicon添加特定的TensorFlow运行时 -->
-    <PackageReference Include="SciSharp.TensorFlow.Redist-OSX-ARM64" Version="2.16.0" />
-  </ItemGroup>
+  <!-- MacOS特定配置 - 使用通用TensorFlow包 -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'osx-arm64' OR ('$(RuntimeIdentifier)' == '' AND '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64')">
+    <!-- 为Apple Silicon设置环境变量 -->
+    <TensorFlowArch>arm64</TensorFlowArch>
+  </PropertyGroup>
 
 </Project> 
