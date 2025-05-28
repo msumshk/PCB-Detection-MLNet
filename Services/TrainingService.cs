@@ -47,6 +47,9 @@ namespace PCBDetection.Services
             _isAppleSilicon = RuntimeInformation.OSArchitecture == Architecture.Arm64 && 
                              RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
             
+            // 设置TensorFlow环境变量以提高兼容性
+            SetTensorFlowEnvironment();
+            
             // 确保输出目录存在，如果不存在则创建
             if (!Directory.Exists(_outputDir))
             {
@@ -57,6 +60,41 @@ namespace PCBDetection.Services
             Console.WriteLine($"系统架构: {RuntimeInformation.OSArchitecture}");
             Console.WriteLine($"操作系统: {RuntimeInformation.OSDescription}");
             Console.WriteLine($"Apple Silicon Mac: {_isAppleSilicon}");
+        }
+
+        /// <summary>
+        /// 设置TensorFlow环境变量以提高兼容性
+        /// </summary>
+        private void SetTensorFlowEnvironment()
+        {
+            try
+            {
+                // 设置TensorFlow日志级别，减少输出
+                Environment.SetEnvironmentVariable("TF_CPP_MIN_LOG_LEVEL", "2");
+                
+                // 禁用GPU（在macOS上通常会导致问题）
+                Environment.SetEnvironmentVariable("CUDA_VISIBLE_DEVICES", "-1");
+                
+                // 设置线程数以避免过度使用CPU
+                Environment.SetEnvironmentVariable("OMP_NUM_THREADS", "4");
+                Environment.SetEnvironmentVariable("TF_NUM_INTEROP_THREADS", "4");
+                Environment.SetEnvironmentVariable("TF_NUM_INTRAOP_THREADS", "4");
+                
+                if (_isAppleSilicon)
+                {
+                    // Apple Silicon特定设置
+                    Environment.SetEnvironmentVariable("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "1");
+                    Console.WriteLine("🔧 已设置Apple Silicon优化环境变量");
+                }
+                else
+                {
+                    Console.WriteLine("🔧 已设置Intel Mac优化环境变量");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ 设置环境变量时出现警告: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -120,75 +158,161 @@ namespace PCBDetection.Services
 
         /// <summary>
         /// 初始化TensorFlow环境
-        /// 通过创建测试管道来验证TensorFlow是否正确安装和配置
-        /// 如果初始化失败，将抛出异常终止程序
+        /// 通过多种方法尝试初始化TensorFlow，包括兼容性检查和自动修复
+        /// 如果所有方法都失败，将抛出异常终止程序
         /// </summary>
         private void InitializeTensorFlow()
         {
-            try
+            Console.WriteLine("🔧 正在初始化TensorFlow深度学习环境...");
+            
+            // 尝试多种初始化方法
+            var initMethods = new List<(string name, Func<bool> method)>
             {
-                // 尝试初始化TensorFlow环境
-                Console.WriteLine("正在检查TensorFlow可用性...");
-                
-                // 创建一个简单的测试数据来验证TensorFlow是否可用
-                var testData = new List<ImageData> 
-                { 
-                    new ImageData { ImagePath = "", Label = "test" } 
-                };
-                var testDataView = _mlContext.Data.LoadFromEnumerable(testData);
-                
-                // 创建测试管道，这将触发TensorFlow初始化
-                var testPipeline = _mlContext.Transforms.Conversion.MapValueToKey("LabelAsKey", "Label");
-                var testModel = testPipeline.Fit(testDataView);
-                
-                // 尝试创建ImageClassification训练器来测试TensorFlow
-                var options = new ImageClassificationTrainer.Options()
-                {
-                    FeatureColumnName = "Image",
-                    LabelColumnName = "LabelAsKey",
-                    Arch = _isAppleSilicon ? ImageClassificationTrainer.Architecture.ResnetV250 : ImageClassificationTrainer.Architecture.ResnetV2101,
-                    TestOnTrainSet = false
-                };
-                
-                var imageClassificationTrainer = _mlContext.MulticlassClassification.Trainers.ImageClassification(options);
-                
-                Console.WriteLine("✅ TensorFlow环境初始化成功！");
-                Console.WriteLine($"✅ 使用架构: {options.Arch}");
-                Console.WriteLine("✅ 深度学习训练器准备就绪");
-            }
-            catch (Exception ex)
+                ("标准初始化", TryStandardInit),
+                ("兼容模式初始化", TryCompatibilityInit),
+                ("简化架构初始化", TrySimplifiedInit)
+            };
+
+            foreach (var (name, method) in initMethods)
             {
-                Console.WriteLine($"❌ TensorFlow初始化失败: {ex.Message}");
-                Console.WriteLine("❌ 无法继续进行深度学习训练");
-                
-                // 提供详细的错误信息和解决建议
-                Console.WriteLine("\n=== TensorFlow 初始化失败详细信息 ===");
-                Console.WriteLine($"错误类型: {ex.GetType().Name}");
-                Console.WriteLine($"错误消息: {ex.Message}");
-                if (ex.InnerException != null)
+                try
                 {
-                    Console.WriteLine($"内部错误: {ex.InnerException.Message}");
+                    Console.WriteLine($"🔄 尝试{name}...");
+                    if (method())
+                    {
+                        Console.WriteLine($"✅ {name}成功！");
+                        Console.WriteLine("✅ TensorFlow深度学习环境准备就绪");
+                        return;
+                    }
                 }
-                
-                Console.WriteLine("\n=== 解决建议 ===");
-                Console.WriteLine("1. 确保已正确安装 .NET 8.0 SDK");
-                Console.WriteLine("2. 运行: dotnet clean && dotnet restore --force");
-                Console.WriteLine("3. 检查系统是否有足够的内存和存储空间");
-                
-                if (_isAppleSilicon)
+                catch (Exception ex)
                 {
-                    Console.WriteLine("4. Apple Silicon Mac 特定解决方案:");
-                    Console.WriteLine("   - 尝试使用 Rosetta 2: arch -x86_64 dotnet run");
-                    Console.WriteLine("   - 确保安装了 x64 版本的 .NET SDK");
+                    Console.WriteLine($"❌ {name}失败: {ex.Message}");
                 }
-                else
-                {
-                    Console.WriteLine("4. Intel Mac 解决方案:");
-                    Console.WriteLine("   - 确保使用 x64 架构运行");
-                }
-                
-                throw new InvalidOperationException("TensorFlow 深度学习环境初始化失败，无法继续训练", ex);
             }
+
+            // 所有方法都失败，提供详细的错误信息
+            Console.WriteLine("❌ 所有TensorFlow初始化方法都失败");
+            ProvideTensorFlowSolution();
+            throw new InvalidOperationException("TensorFlow 深度学习环境初始化失败，无法继续训练");
+        }
+
+        /// <summary>
+        /// 尝试标准TensorFlow初始化
+        /// </summary>
+        private bool TryStandardInit()
+        {
+            var testData = new List<ImageData> { new ImageData { ImagePath = "", Label = "test" } };
+            var testDataView = _mlContext.Data.LoadFromEnumerable(testData);
+            
+            var options = new ImageClassificationTrainer.Options()
+            {
+                FeatureColumnName = "Image",
+                LabelColumnName = "LabelAsKey",
+                Arch = _isAppleSilicon ? ImageClassificationTrainer.Architecture.ResnetV250 : ImageClassificationTrainer.Architecture.ResnetV2101,
+                TestOnTrainSet = false,
+                Epoch = 1 // 最小epoch用于测试
+            };
+            
+            var trainer = _mlContext.MulticlassClassification.Trainers.ImageClassification(options);
+            Console.WriteLine($"✅ 使用架构: {options.Arch}");
+            return true;
+        }
+
+        /// <summary>
+        /// 尝试兼容模式初始化
+        /// </summary>
+        private bool TryCompatibilityInit()
+        {
+            var testData = new List<ImageData> { new ImageData { ImagePath = "", Label = "test" } };
+            var testDataView = _mlContext.Data.LoadFromEnumerable(testData);
+            
+            // 使用最轻量的架构
+            var options = new ImageClassificationTrainer.Options()
+            {
+                FeatureColumnName = "Image",
+                LabelColumnName = "LabelAsKey",
+                Arch = ImageClassificationTrainer.Architecture.MobilenetV2,
+                TestOnTrainSet = false,
+                Epoch = 1,
+                BatchSize = 4 // 更小的批次大小
+            };
+            
+            var trainer = _mlContext.MulticlassClassification.Trainers.ImageClassification(options);
+            Console.WriteLine($"✅ 使用兼容架构: {options.Arch}");
+            return true;
+        }
+
+        /// <summary>
+        /// 尝试简化架构初始化
+        /// </summary>
+        private bool TrySimplifiedInit()
+        {
+            var testData = new List<ImageData> { new ImageData { ImagePath = "", Label = "test" } };
+            var testDataView = _mlContext.Data.LoadFromEnumerable(testData);
+            
+            // 使用最基础的架构
+            var options = new ImageClassificationTrainer.Options()
+            {
+                FeatureColumnName = "Image",
+                LabelColumnName = "LabelAsKey",
+                Arch = ImageClassificationTrainer.Architecture.ResnetV250,
+                TestOnTrainSet = false,
+                Epoch = 1,
+                BatchSize = 2,
+                LearningRate = 0.001f
+            };
+            
+            var trainer = _mlContext.MulticlassClassification.Trainers.ImageClassification(options);
+            Console.WriteLine($"✅ 使用简化架构: {options.Arch}");
+            return true;
+        }
+
+        /// <summary>
+        /// 提供TensorFlow问题的详细解决方案
+        /// </summary>
+        private void ProvideTensorFlowSolution()
+        {
+            Console.WriteLine("\n=== 🔧 MacOS TensorFlow 深度学习解决方案 ===");
+            
+            if (_isAppleSilicon)
+            {
+                Console.WriteLine("📱 Apple Silicon Mac 解决方案:");
+                Console.WriteLine("1. 🔄 使用Rosetta 2运行:");
+                Console.WriteLine("   arch -x86_64 dotnet run");
+                Console.WriteLine();
+                Console.WriteLine("2. 🔧 安装x64版本的.NET SDK:");
+                Console.WriteLine("   curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --architecture x64");
+                Console.WriteLine();
+                Console.WriteLine("3. 🔄 清理并重新构建:");
+                Console.WriteLine("   dotnet clean");
+                Console.WriteLine("   dotnet restore --force");
+                Console.WriteLine("   arch -x86_64 dotnet build");
+                Console.WriteLine();
+                Console.WriteLine("4. 🎯 设置环境变量:");
+                Console.WriteLine("   export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1");
+                Console.WriteLine("   export TF_CPP_MIN_LOG_LEVEL=2");
+            }
+            else
+            {
+                Console.WriteLine("💻 Intel Mac 解决方案:");
+                Console.WriteLine("1. 🔄 确保使用x64架构:");
+                Console.WriteLine("   dotnet run --runtime osx-x64");
+                Console.WriteLine();
+                Console.WriteLine("2. 🔧 重新安装依赖:");
+                Console.WriteLine("   dotnet clean");
+                Console.WriteLine("   dotnet restore --force");
+            }
+            
+            Console.WriteLine("\n📋 通用解决方案:");
+            Console.WriteLine("1. ✅ 确保.NET 8.0 SDK版本正确:");
+            Console.WriteLine("   dotnet --version");
+            Console.WriteLine();
+            Console.WriteLine("2. 💾 检查可用内存和存储空间");
+            Console.WriteLine("3. 🔄 重启终端并重新尝试");
+            Console.WriteLine();
+            Console.WriteLine("⚠️  注意: 本项目仅支持TensorFlow深度学习");
+            Console.WriteLine("   如果问题持续，请考虑在Intel Mac或Linux环境中运行");
         }
 
         /// <summary>

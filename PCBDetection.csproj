@@ -22,8 +22,8 @@
     <PackageReference Include="Microsoft.ML.ImageAnalytics" Version="3.0.1" />
     <!-- ML.NET TensorFlow包：提供TensorFlow集成支持 -->
     <PackageReference Include="Microsoft.ML.TensorFlow" Version="3.0.1" />
-    <!-- TensorFlow运行时：更新到支持Apple Silicon的版本 -->
-    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
+    <!-- TensorFlow运行时：使用最稳定的版本 -->
+    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.3.1" />
     <!-- YAML解析器：用于读取数据集配置文件 -->
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
