@@ -20,18 +20,26 @@
     <PackageReference Include="Microsoft.ML.Vision" Version="3.0.1" />
     <!-- ML.NET图像分析包：提供图像预处理功能 -->
     <PackageReference Include="Microsoft.ML.ImageAnalytics" Version="3.0.1" />
-    <!-- ML.NET TensorFlow包：提供TensorFlow集成支持 -->
+    
+    <!-- 深度学习支持包 - 多种选择 -->
+    <!-- TensorFlow支持（主要选择） -->
     <PackageReference Include="Microsoft.ML.TensorFlow" Version="3.0.1" />
-    <!-- TensorFlow运行时：使用最稳定的版本 -->
-    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.3.1" />
+    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
+    
+    <!-- ONNX支持（备用选择） -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.16.3" />
+    <PackageReference Include="Microsoft.ML.OnnxTransformer" Version="3.0.1" />
+    
     <!-- YAML解析器：用于读取数据集配置文件 -->
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
 
-  <!-- MacOS特定配置 - 使用通用TensorFlow包 -->
+  <!-- MacOS特定配置 -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'osx-arm64' OR ('$(RuntimeIdentifier)' == '' AND '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64')">
     <!-- 为Apple Silicon设置环境变量 -->
     <TensorFlowArch>arm64</TensorFlowArch>
+    <!-- 优先使用ONNX在Apple Silicon上 -->
+    <PreferOnnx>true</PreferOnnx>
   </PropertyGroup>
 
 </Project> 
